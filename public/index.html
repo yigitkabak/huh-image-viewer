@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUH Dosyasını Görüntüle</title>
+</head>
+<body>
+    <h1>HUH Dosyasını Görüntüle</h1>
+    <canvas id="image-canvas"></canvas>
+
+    <script>
+        window.onload = function() {
+            fetch('/get-huh')  // Sunucudan yigit.huh dosyasını alıyoruz
+                .then(response => response.arrayBuffer())
+                .then(data => {
+                    const byteArray = new Uint8Array(data);
+
+                    // İlk 8 byte, genişlik (width) ve yükseklik (height)
+                    const width = new DataView(byteArray.buffer, 0, 4).getUint32(0, true);
+                    const height = new DataView(byteArray.buffer, 4, 4).getUint32(4, true);
+
+                    // Piksel verilerini çözümleyelim
+                    const pixels = [];
+                    let index = 8; // Genişlik ve yükseklikten sonra başlıyor
+                    for (let i = 0; i < width * height; i++) {
+                        const r = byteArray[index++];
+                        const g = byteArray[index++];
+                        const b = byteArray[index++];
+                        pixels.push([r, g, b]);
+                    }
+
+                    // Canvas üzerinde resmi göster
+                    const canvas = document.getElementById('image-canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const imageData = ctx.createImageData(width, height);
+                    const imageDataArray = imageData.data;
+
+                    // Piksel verilerini ImageData'ya aktaralım
+                    let pixelIndex = 0;
+                    for (const [r, g, b] of pixels) {
+                        imageDataArray[pixelIndex++] = r; // Red
+                        imageDataArray[pixelIndex++] = g; // Green
+                        imageDataArray[pixelIndex++] = b; // Blue
+                        imageDataArray[pixelIndex++] = 255; // Alpha (tam opak)
+                    }
+
+                    // Görüntüyü canvas'a yazdıralım
+                    ctx.putImageData(imageData, 0, 0);
+                })
+                .catch(error => {
+                    console.error('Dosya alırken hata oluştu:', error);
+                    alert('Dosya alırken hata oluştu!');
+                });
+        };
+    </script>
+</body>
+</html>
