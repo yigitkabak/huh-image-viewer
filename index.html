@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUH Image Viewer</title>
+</head>
+<body>
+    <h1>HUH Image Viewer</h1>
+    <canvas id="imageCanvas"></canvas>
+    <input type="file" id="fileInput" />
+    <p id="errorMessage" style="color: red; display: none;">Please select a valid .huh file!</p>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const errorMessage = document.getElementById('errorMessage');
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                if (!file.name.endsWith('.huh')) {
+                    errorMessage.style.display = 'block';
+                    return;
+                } else {
+                    errorMessage.style.display = 'none';
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new DataView(e.target.result);
+                    const width = data.getUint32(0, true);
+                    const height = data.getUint32(4, true);
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    let pixelIndex = 8;
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            const r = data.getUint8(pixelIndex++);
+                            const g = data.getUint8(pixelIndex++);
+                            const b = data.getUint8(pixelIndex++);
+                            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+    </script>
+</body>
+</html>
