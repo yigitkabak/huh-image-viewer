@@ -5,15 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HUH Image Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Optional: Add some basic styling for the body if Tailwind classes are not enough */
+        body {
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+            max-width: 100%; /* Ensure canvas scales down on smaller screens */
+            height: auto;
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center">
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
     <h1 class="text-4xl font-bold mb-8 text-center">HUH Image Viewer</h1>
 
-    <div class="flex flex-col items-center gap-4">
-        <canvas id="imageCanvas" class="border border-gray-700 w-full max-w-4xl"></canvas>
+    <div class="flex flex-col items-center gap-4 w-full max-w-4xl">
+        <canvas id="imageCanvas" class="border border-gray-700 bg-gray-800"></canvas>
 
-        <input type="file" id="fileInput" class="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer hover:file:bg-indigo-500 text-sm" />
-        
+        <label for="fileInput" class="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer hover:file:bg-indigo-500 text-sm inline-flex items-center justify-center p-2 rounded-md bg-indigo-600 text-white cursor-pointer hover:bg-indigo-500 transition-colors duration-200">
+            Choose a .HUH File
+            <input type="file" id="fileInput" class="hidden" accept=".huh" />
+        </label>
+
         <p id="errorMessage" class="text-red-500 hidden mt-2">Please select a valid .huh file!</p>
     </div>
 
@@ -23,36 +37,83 @@
         const ctx = canvas.getContext('2d');
         const errorMessage = document.getElementById('errorMessage');
 
+        /**
+         * Handles the file input change event to load and display the HUH image.
+         */
         fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
+            const file = event.target.files[0]; // Get the selected file
+
             if (file) {
-                if (!file.name.endsWith('.huh')) {
+                // Validate file extension
+                if (!file.name.toLowerCase().endsWith('.huh')) {
+                    errorMessage.textContent = "Error: Please select a file with the .huh extension.";
                     errorMessage.classList.remove('hidden');
+                    // Clear the canvas if an invalid file was selected after a valid one
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    canvas.width = 0;
+                    canvas.height = 0;
                     return;
                 } else {
-                    errorMessage.classList.add('hidden');
+                    errorMessage.classList.add('hidden'); // Hide error message if valid file
                 }
 
                 const reader = new FileReader();
+
+                // When the file is loaded
                 reader.onload = function(e) {
-                    const data = new DataView(e.target.result);
-                    const width = data.getUint32(0, true);
-                    const height = data.getUint32(4, true);
+                    try {
+                        const data = new DataView(e.target.result);
 
-                    canvas.width = width;
-                    canvas.height = height;
+                        // Read width and height from the first 8 bytes (4 bytes for width, 4 for height)
+                        // Using `true` for little-endian as per your Rust code's `to_ne_bytes()` which is often little-endian on common systems.
+                        // If images appear corrupted, try changing 'true' to 'false' for big-endian.
+                        const width = data.getUint32(0, true);
+                        const height = data.getUint32(4, true);
 
-                    let pixelIndex = 8;
-                    for (let y = 0; y < height; y++) {
-                        for (let x = 0; x < width; x++) {
-                            const r = data.getUint8(pixelIndex++);
-                            const g = data.getUint8(pixelIndex++);
-                            const b = data.getUint8(pixelIndex++);
-                            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                            ctx.fillRect(x, y, 1, 1);
+                        // Basic validation for dimensions
+                        if (width === 0 || height === 0 || width * height * 3 > data.byteLength - 8) {
+                            throw new Error("Invalid HUH file: Dimensions or pixel data size mismatch.");
                         }
+
+                        canvas.width = width;
+                        canvas.height = height;
+
+                        // Create an ImageData object to draw pixels more efficiently
+                        const imageData = ctx.createImageData(width, height);
+                        const pixels = imageData.data; // This is a Uint8ClampedArray for RGBA
+
+                        let pixelIndex = 8; // Start reading pixel data after the 8-byte header
+                        let dataOffset = 0; // Offset for the ImageData array (RGBA, so 4 bytes per pixel)
+
+                        for (let y = 0; y < height; y++) {
+                            for (let x = 0; x < width; x++) {
+                                // Read RGB values
+                                const r = data.getUint8(pixelIndex++);
+                                const g = data.getUint8(pixelIndex++);
+                                const b = data.getUint8(pixelIndex++);
+
+                                // Set RGBA values in the ImageData array
+                                pixels[dataOffset++] = r;
+                                pixels[dataOffset++] = g;
+                                pixels[dataOffset++] = b;
+                                pixels[dataOffset++] = 255; // Alpha channel (fully opaque)
+                            }
+                        }
+
+                        // Put the image data onto the canvas
+                        ctx.putImageData(imageData, 0, 0);
+
+                    } catch (error) {
+                        errorMessage.textContent = `Error processing HUH file: ${error.message}`;
+                        errorMessage.classList.remove('hidden');
+                        // Clear the canvas on error
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        canvas.width = 0;
+                        canvas.height = 0;
                     }
                 };
+
+                // Read the file as an ArrayBuffer
                 reader.readAsArrayBuffer(file);
             }
         });
